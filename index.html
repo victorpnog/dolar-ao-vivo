@@ -196,20 +196,32 @@
             }
         }
 
-        // 2. Busca o Petróleo Brent (BZ=F) e faz a conversão
+        // 2. Busca o Petróleo Brent (BZ=F) com Redundância de Proxy
         async function carregarPetroleoBrent() {
             try {
-                // Ticker "BZ=F" garante que estamos buscando o Petróleo Brent da ICE
                 const urlYahoo = 'https://query1.finance.yahoo.com/v8/finance/chart/BZ=F';
-                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlYahoo)}`;
-                
-                const response = await fetch(proxyUrl);
-                const dataProxy = await response.json();
-                const data = JSON.parse(dataProxy.contents);
-                
+                let data;
+
+                // TENTATIVA 1: Proxy Codetabs
+                try {
+                    const proxy1 = `https://api.codetabs.com/v1/proxy?quest=${urlYahoo}`;
+                    const response1 = await fetch(proxy1, { cache: "no-store" });
+                    if (!response1.ok) throw new Error("Falha no proxy 1");
+                    data = await response1.json();
+                } catch (erro1) {
+                    console.warn('Proxy primário falhou, tentando secundário...', erro1);
+                    
+                    // TENTATIVA 2: Proxy AllOrigins (modo RAW)
+                    const proxy2 = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlYahoo)}`;
+                    const response2 = await fetch(proxy2, { cache: "no-store" });
+                    if (!response2.ok) throw new Error("Falha no proxy 2");
+                    data = await response2.json();
+                }
+
+                // Navega no JSON do Yahoo Finance
                 const precoUSD = parseFloat(data.chart.result[0].meta.regularMarketPrice);
                 
-                // Atualiza o valor em Dólar (Principal do cartão)
+                // Atualiza o valor em Dólar
                 const elUsd = document.getElementById('valor-petroleo-usd');
                 elUsd.innerText = 'US$ ' + precoUSD.toFixed(2);
                 elUsd.classList.remove('erro');
@@ -224,13 +236,14 @@
                     elBrl.innerText = 'Conversão indisponível';
                 }
             } catch (erro) {
+                // Se ambos os proxies falharem, exibe o erro
                 const elUsd = document.getElementById('valor-petroleo-usd');
-                elUsd.innerText = 'Erro';
+                elUsd.innerText = 'Serviço Indisponível';
                 elUsd.classList.add('erro');
                 
                 const elBrl = document.getElementById('valor-petroleo-brl');
                 elBrl.style.display = 'none';
-                console.error('Erro Petróleo Brent:', erro);
+                console.error('Erro Petróleo Brent (Tentativas esgotadas):', erro);
             }
         }
 
