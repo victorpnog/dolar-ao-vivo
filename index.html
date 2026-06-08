@@ -67,7 +67,7 @@
         </div>
         
         <div class="card">
-            <h1>Barril de Petróleo (USD)</h1>
+            <h1>Petróleo WTI (USD)</h1>
             <div id="valor-petroleo" class="valor">Carregando...</div>
         </div>
     </div>
@@ -76,58 +76,69 @@
     <div id="atualizado"></div>
 
     <script>
-        // Função para buscar o Dólar
+        // Função para buscar o Dólar (AwesomeAPI)
         async function carregarDolar() {
             try {
                 const response = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL');
                 const data = await response.json();
                 const valor = parseFloat(data.USDBRL.bid).toFixed(2);
-                document.getElementById('valor-dolar').innerText = 'R$ ' + valor;
-                document.getElementById('valor-dolar').classList.remove('erro');
+                
+                const el = document.getElementById('valor-dolar');
+                el.innerText = 'R$ ' + valor;
+                el.classList.remove('erro');
             } catch (erro) {
-                document.getElementById('valor-dolar').innerText = 'Erro ao carregar';
-                document.getElementById('valor-dolar').classList.add('erro');
+                const el = document.getElementById('valor-dolar');
+                el.innerText = 'Erro';
+                el.classList.add('erro');
                 console.error('Erro Dólar:', erro);
             }
         }
 
-        // Função para buscar o Petróleo
+        // Função para buscar o Petróleo WTI (Yahoo Finance via AllOrigins Proxy)
         async function carregarPetroleo() {
             try {
-                // --- SUBSTITUA PELA SUA API REAL DE PETRÓLEO AQUI ---
-                // Exemplo: const response = await fetch('URL_DA_SUA_API');
-                // const data = await response.json();
-                // const valor = data.preco;
+                // Definimos a URL da API do Yahoo Finance para o ticker "CL=F" (Crude Oil)
+                const urlYahoo = 'https://query1.finance.yahoo.com/v8/finance/chart/CL=F';
                 
-                // Simulação matemática gerando um valor entre $75 e $85 para testes:
-                const valorSimulado = (Math.random() * (85 - 75) + 75).toFixed(2); 
+                // Passamos pela API do AllOrigins para evitar o bloqueio de CORS no navegador
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlYahoo)}`;
                 
-                document.getElementById('valor-petroleo').innerText = 'US$ ' + valorSimulado;
-                document.getElementById('valor-petroleo').classList.remove('erro');
+                const response = await fetch(proxyUrl);
+                const dataProxy = await response.json();
+                
+                // O proxy retorna o JSON em formato de string dentro de "contents", precisamos converter
+                const data = JSON.parse(dataProxy.contents);
+                
+                // Navegamos pelo JSON do Yahoo Finance para extrair o valor atual
+                const valor = parseFloat(data.chart.result[0].meta.regularMarketPrice).toFixed(2);
+                
+                const el = document.getElementById('valor-petroleo');
+                el.innerText = 'US$ ' + valor;
+                el.classList.remove('erro');
             } catch (erro) {
-                document.getElementById('valor-petroleo').innerText = 'Erro ao carregar';
-                document.getElementById('valor-petroleo').classList.add('erro');
+                const el = document.getElementById('valor-petroleo');
+                el.innerText = 'Erro';
+                el.classList.add('erro');
                 console.error('Erro Petróleo:', erro);
             }
         }
 
-        // Função mestre que chama ambas e atualiza a hora
+        // Função mestre que aciona as buscas e marca a hora
         async function atualizarDados() {
-            // Feedback visual de carregamento
             document.getElementById('valor-dolar').innerText = 'Carregando...';
             document.getElementById('valor-petroleo').innerText = 'Carregando...';
             
-            // Roda as duas buscas ao mesmo tempo
+            // Dispara as duas funções simultaneamente
             await Promise.all([carregarDolar(), carregarPetroleo()]);
             
-            const dataHora = new Date().toLocaleString();
+            const dataHora = new Date().toLocaleString('pt-BR');
             document.getElementById('atualizado').innerText = 'Última atualização: ' + dataHora;
         }
 
-        // Carrega imediatamente ao abrir a página
+        // Inicia carregando os dados assim que a tela abre
         atualizarDados();
         
-        // Atualiza automaticamente a cada 1 minuto (60.000 milissegundos)
+        // Mantém a atualização em loop a cada 60.000 milissegundos (1 minuto)
         setInterval(atualizarDados, 60000);
     </script>
 </body>
