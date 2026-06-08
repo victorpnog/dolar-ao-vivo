@@ -43,7 +43,7 @@
             gap: 24px;
             flex-wrap: wrap;
             width: 100%;
-            max-width: 1000px; /* Aumentado para acomodar os 3 cards */
+            max-width: 1000px;
             margin-bottom: 32px;
         }
 
@@ -70,9 +70,8 @@
             background-color: var(--verde-sucesso);
         }
 
-        /* Variação de cor para diferenciar as commodities */
-        .card.brent::before { background-color: #f59e0b; } /* Laranja para Brent */
-        .card.wti::before { background-color: #3b82f6; } /* Azul para WTI */
+        .card.brent::before { background-color: #f59e0b; } 
+        .card.wti::before { background-color: #3b82f6; } 
 
         .card h2 {
             font-size: 14px;
@@ -153,6 +152,7 @@
             font-size: 12px;
             color: var(--texto-s);
             font-weight: 400;
+            min-height: 14px;
         }
 
         @keyframes pulse {
@@ -178,20 +178,20 @@
             <h2>Petróleo Brent</h2>
             <span class="desc-ativo">Referência Global (Europa/Mar do Norte)</span>
             <div id="valor-brent-usd" class="valor-principal">Carregando...</div>
-            <div id="valor-brent-brl" class="valor-secundario">Aguardando Dólar...</div>
+            <div id="valor-brent-brl" class="valor-secundario" style="display:none;">Aguardando Dólar...</div>
         </div>
 
         <div class="card wti">
             <h2>Petróleo WTI</h2>
             <span class="desc-ativo">Referência Americana (West Texas Intermediate)</span>
             <div id="valor-wti-usd" class="valor-principal">Carregando...</div>
-            <div id="valor-wti-brl" class="valor-secundario">Aguardando Dólar...</div>
+            <div id="valor-wti-brl" class="valor-secundario" style="display:none;">Aguardando Dólar...</div>
         </div>
     </div>
 
     <div class="footer-zone">
         <button class="btn-atualizar" onclick="atualizarDados()">Atualizar Agora</button>
-        <div id="atualizado">Iniciando painel...</div>
+        <div id="atualizado"></div>
     </div>
 
     <script>
@@ -216,27 +216,20 @@
             }
         }
 
-        // 2. Função Genérica para buscar Petróleo (Aceita Brent ou WTI) com Redundância
+        // 2. Busca Petróleo Otimizada: Corrida de Servidores (Fastest Wins)
         async function carregarPetroleo(ticker, idUsd, idBrl) {
             try {
                 const urlYahoo = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
-                let data;
-
-                // TENTATIVA 1: Proxy Codetabs
-                try {
-                    const proxy1 = `https://api.codetabs.com/v1/proxy?quest=${urlYahoo}`;
-                    const response1 = await fetch(proxy1, { cache: "no-store" });
-                    if (!response1.ok) throw new Error("Falha no proxy 1");
-                    data = await response1.json();
-                } catch (erro1) {
-                    console.warn(`Proxy primário falhou para ${ticker}, tentando secundário...`);
+                
+                // Dispara requisições para dois proxies simultaneamente
+                const req1 = fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(urlYahoo)}`, { cache: "no-store" })
+                    .then(r => r.ok ? r.json() : Promise.reject('Proxy 1 falhou'));
                     
-                    // TENTATIVA 2: Proxy AllOrigins (modo RAW)
-                    const proxy2 = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlYahoo)}`;
-                    const response2 = await fetch(proxy2, { cache: "no-store" });
-                    if (!response2.ok) throw new Error("Falha no proxy 2");
-                    data = await response2.json();
-                }
+                const req2 = fetch(`https://api.codetabs.com/v1/proxy?quest=${urlYahoo}`, { cache: "no-store" })
+                    .then(r => r.ok ? r.json() : Promise.reject('Proxy 2 falhou'));
+
+                // O Promise.any pega automaticamente o primeiro servidor que responder com sucesso
+                const data = await Promise.any([req1, req2]);
 
                 // Navega no JSON do Yahoo Finance
                 const precoUSD = parseFloat(data.chart.result[0].meta.regularMarketPrice);
@@ -254,32 +247,34 @@
                     elBrl.style.display = 'inline-block';
                 } else {
                     elBrl.innerText = 'Conversão indisponível';
+                    elBrl.style.display = 'inline-block';
                 }
             } catch (erro) {
-                // Se ambos os proxies falharem, exibe o erro
+                // Se TODOS os proxies falharem
                 const elUsd = document.getElementById(idUsd);
                 elUsd.innerText = 'Indisponível';
                 elUsd.classList.add('erro');
                 
                 const elBrl = document.getElementById(idBrl);
                 elBrl.style.display = 'none';
-                console.error(`Erro Petróleo (${ticker}):`, erro);
+                console.error(`Erro Petróleo (${ticker}): Ambos os servidores falharam.`);
             }
         }
 
-        // Função principal de atualização externa/interna
+        // Função principal
         async function atualizarDados() {
-            // Efeito visual de carregamento nos campos principais
             document.getElementById('valor-dolar').innerHTML = '<span class="carregando">Carregando...</span>';
             document.getElementById('valor-brent-usd').innerHTML = '<span class="carregando">Carregando...</span>';
-            document.getElementById('valor-brent-brl').innerText = 'Calculando...';
             document.getElementById('valor-wti-usd').innerHTML = '<span class="carregando">Carregando...</span>';
-            document.getElementById('valor-wti-brl').innerText = 'Calculando...';
             
-            // PRIMEIRO: Carrega o dólar e espera finalizar (fundamental para a conversão exata)
+            // Oculta as tags de conversão em real enquanto atualiza
+            document.getElementById('valor-brent-brl').style.display = 'none';
+            document.getElementById('valor-wti-brl').style.display = 'none';
+            
+            // Carrega dólar primeiro
             await carregarDolar();
             
-            // SEGUNDO: Dispara as buscas de Brent (BZ=F) e WTI (CL=F) simultaneamente
+            // Dispara Brent e WTI
             await Promise.all([
                 carregarPetroleo('BZ=F', 'valor-brent-usd', 'valor-brent-brl'),
                 carregarPetroleo('CL=F', 'valor-wti-usd', 'valor-wti-brl')
@@ -289,10 +284,10 @@
             document.getElementById('atualizado').innerText = 'Última atualização em: ' + dataHora;
         }
 
-        // Inicialização primária ao abrir a página
+        // Inicia
         atualizarDados();
         
-        // Loop estável programado para 1 minuto exato (60000ms)
+        // Loop a cada 60s
         setInterval(atualizarDados, 60000);
     </script>
 </body>
